@@ -92,11 +92,12 @@ fn restore(
 
     command
         .arg("-d")
+        .arg(db_name)
         .arg("-U")
         .arg(db_user)
         .arg("--if-exists")
         .arg("-c")
-        .arg("---no-owner")
+        .arg("--no-owner")
         .stdin(Stdio::piped());
 
     let mut res = command.spawn().expect("Failed to start command");
@@ -110,14 +111,15 @@ fn restore(
 
     let pb = ProgressBar::new(file_size);
     pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner} {total_bytes} {bytes_per_sec}")
+        ProgressStyle::default_bar()
+            .template("[{bar:40.cyan/blue}] {percent}% {pos}/{len} {msg}")
             .expect("Template error"),
     );
 
     loop {
         match file_reader.read(&mut buffer) {
             Ok(0) => {
+                pb.finish();
                 break;
             }
             Ok(n) => {
@@ -193,6 +195,7 @@ fn dump(
     loop {
         match stdout.read(&mut buffer) {
             Ok(0) => {
+                pb.finish();
                 break;
             }
             Ok(n) => {
@@ -219,6 +222,13 @@ fn main() {
 
     // let _ = dump("doorsight", "adjan", None, None).expect("Failed to dump database");
 
+    match drop_db("testje", "postgres", Some("pgtest")) {
+        Ok(()) => {
+            println!("Dropped database")
+        }
+        Err(err) => println!("Failed to drop database {:?}", err),
+    }
+
     match create_db("testje", "postgres", Some("pgtest")) {
         Ok(()) => {
             println!("Created database")
@@ -226,10 +236,12 @@ fn main() {
         Err(err) => println!("Failed to create database {:?}", err),
     }
 
-    match drop_db("testje", "postgres", Some("pgtest")) {
+    let f = Path::new("db.dump");
+
+    match restore("testje", "postgres", f, Some("pgtest")) {
         Ok(()) => {
-            println!("Dropped database")
+            println!("Restored database")
         }
-        Err(err) => println!("Failed to drop database {:?}", err),
+        Err(err) => println!("Failed to restore database {:?}", err),
     }
 }
