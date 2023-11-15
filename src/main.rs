@@ -12,15 +12,46 @@ enum DBError {
     IoError(std::io::Error),
 }
 
-fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
-    let mut command = Command::new("dropdb");
+fn create_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
+    let mut command: Command;
 
     match docker_container {
         Some(container) => {
-            command.arg("docker").arg("exec").arg("-i").arg(container);
+            command = Command::new("docker");
+            command.arg("exec").arg("-i").arg(container).arg("createdb");
         }
-        _ => {}
+        _ => {
+            command = Command::new("createdb");
+        }
     }
+
+    command.arg(db_name).arg("-U").arg(db_user);
+
+    match command.output() {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(DBError::CommandFailed(output.status))
+            }
+        }
+        Err(err) => Err(DBError::IoError(err)),
+    }
+}
+
+fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
+    let mut command: Command;
+
+    match docker_container {
+        Some(container) => {
+            command = Command::new("docker");
+            command.arg("exec").arg("-i").arg(container).arg("dropdb");
+        }
+        _ => {
+            command = Command::new("dropdb");
+        }
+    }
+
     command.arg(db_name).arg("-U").arg(db_user);
 
     let result = command.output();
@@ -43,13 +74,16 @@ fn dump(
     dump_file: Option<&str>,
     docker_container: Option<&str>,
 ) -> Result<(), DBError> {
-    let mut command = Command::new("pg_dump");
+    let mut command;
 
     match docker_container {
         Some(container) => {
-            command.arg("docker").arg("exec").arg("-i").arg(container);
+            command = Command::new("docker");
+            command.arg("exec").arg("-i").arg(container).arg("pg_dump");
         }
-        _ => {}
+        _ => {
+            command = Command::new("pg_dump");
+        }
     }
 
     let dump_path = dump_file.unwrap_or("db.dump");
@@ -106,5 +140,14 @@ fn main() {
     // let arg1 = &args[1];
     // println!("First argument: {}", arg1);
 
-    let _ = dump("doorsight", "adjan", None, None).expect("Failed to dump database");
+    // let _ = dump("doorsight", "adjan", None, None).expect("Failed to dump database");
+
+    match create_db("testje", "postgres", Some("pgtest")) {
+        Ok(()) => {
+            println!("Created database")
+        }
+        Err(err) => println!("Failed to create database {:?}", err)
+    }
+
+
 }
