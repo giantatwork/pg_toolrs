@@ -7,16 +7,12 @@ use std::{
 use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Debug)]
-enum DropDBError {
+enum DBError {
     CommandFailed(ExitStatus),
     IoError(std::io::Error),
 }
 
-fn drop_db(
-    db_name: &str,
-    db_user: &str,
-    docker_container: Option<&str>,
-) -> Result<(), DropDBError> {
+fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
     let mut command = Command::new("dropdb");
 
     match docker_container {
@@ -28,19 +24,25 @@ fn drop_db(
     command.arg(db_name).arg("-U").arg(db_user);
 
     let result = command.output();
+
     match result {
         Ok(output) => {
             if output.status.success() {
                 Ok(())
             } else {
-                Err(DropDBError::CommandFailed(output.status))
+                Err(DBError::CommandFailed(output.status))
             }
         }
-        Err(err) => Err(DropDBError::IoError(err)),
+        Err(err) => Err(DBError::IoError(err)),
     }
 }
 
-fn dump(db_name: &str, db_user: &str, dump_file: Option<&str>, docker_container: Option<&str>) {
+fn dump(
+    db_name: &str,
+    db_user: &str,
+    dump_file: Option<&str>,
+    docker_container: Option<&str>,
+) -> Result<(), DBError> {
     let mut command = Command::new("pg_dump");
 
     match docker_container {
@@ -79,15 +81,23 @@ fn dump(db_name: &str, db_user: &str, dump_file: Option<&str>, docker_container:
                 break;
             }
             Ok(n) => {
-                file.write_all(&buffer[..n])
-                    .expect("Failed to write to file");
-                pb.inc(n as u64);
+                let result = file.write_all(&buffer[..n]);
+                match result {
+                    Ok(()) => {
+                        pb.inc(n as u64);
+                    }
+                    Err(err) => {
+                        return Err(DBError::IoError(err));
+                    }
+                }
             }
-            Err(e) => {
-                eprint!("Command failed with error {:?}", e);
+            Err(err) => {
+                return Err(DBError::IoError(err));
             }
         }
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -96,5 +106,5 @@ fn main() {
     // let arg1 = &args[1];
     // println!("First argument: {}", arg1);
 
-    dump("doorsight", "adjan", None, None);
+    let _ = dump("doorsight", "adjan", None, None).expect("Failed to dump database");
 }
