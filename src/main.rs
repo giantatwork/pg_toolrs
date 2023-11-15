@@ -1,18 +1,15 @@
 // use std::env;
 use std::{
     io::{Read, Write},
-    process::{Command, ExitStatus, Stdio},
+    path::Path,
+    process::{Command, Stdio},
 };
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-#[derive(Debug)]
-enum DBError {
-    CommandFailed(ExitStatus),
-    IoError(std::io::Error),
-}
+use anyhow::{bail, Error};
 
-fn create_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
+fn create_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), Error> {
     let mut command: Command;
 
     match docker_container {
@@ -32,14 +29,14 @@ fn create_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Re
             if output.status.success() {
                 Ok(())
             } else {
-                Err(DBError::CommandFailed(output.status))
+                bail!("Error: {}", output.status.to_string())
             }
         }
-        Err(err) => Err(DBError::IoError(err)),
+        Err(err) => bail!("Error: {}", err),
     }
 }
 
-fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), DBError> {
+fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), Error> {
     let mut command: Command;
 
     match docker_container {
@@ -61,11 +58,24 @@ fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Resu
             if output.status.success() {
                 Ok(())
             } else {
-                Err(DBError::CommandFailed(output.status))
+                bail!("Error: {}", output.status.to_string())
             }
         }
-        Err(err) => Err(DBError::IoError(err)),
+        Err(err) => bail!("Error: {}", err),
     }
+}
+
+fn restore(
+    db_name: &str,
+    db_user: &str,
+    dump_file: &Path,
+    docker_container: Option<&str>,
+) -> Result<(), Error> {
+    if !dump_file.exists() {
+        bail!("Path does not exist");
+    }
+
+    Ok(())
 }
 
 fn dump(
@@ -73,7 +83,7 @@ fn dump(
     db_user: &str,
     dump_file: Option<&str>,
     docker_container: Option<&str>,
-) -> Result<(), DBError> {
+) -> Result<(), Error> {
     let mut command;
 
     match docker_container {
@@ -120,14 +130,10 @@ fn dump(
                     Ok(()) => {
                         pb.inc(n as u64);
                     }
-                    Err(err) => {
-                        return Err(DBError::IoError(err));
-                    }
+                    Err(err) => bail!("Error: {}", err),
                 }
             }
-            Err(err) => {
-                return Err(DBError::IoError(err));
-            }
+            Err(err) => bail!("Error: {}", err),
         }
     }
 
@@ -146,8 +152,13 @@ fn main() {
         Ok(()) => {
             println!("Created database")
         }
-        Err(err) => println!("Failed to create database {:?}", err)
+        Err(err) => println!("Failed to create database {:?}", err),
     }
 
-
+    match drop_db("testje", "postgres", Some("pgtest")) {
+        Ok(()) => {
+            println!("Dropped database")
+        }
+        Err(err) => println!("Failed to drop database {:?}", err),
+    }
 }
