@@ -1,4 +1,6 @@
 // use std::env;
+// TODO clap gebruiken voor cli argument parsing
+// TODO aparte modules maken voor functies en helpers etc.
 use std::{
     fs::File,
     io::{BufReader, Read, Write},
@@ -215,13 +217,6 @@ fn dump(
 }
 
 fn main() {
-    // let args: Vec<String> = env::args().collect();
-
-    // let arg1 = &args[1];
-    // println!("First argument: {}", arg1);
-
-    // let _ = dump("doorsight", "adjan", None, None).expect("Failed to dump database");
-
     match drop_db("testje", "postgres", Some("pgtest")) {
         Ok(()) => {
             println!("Dropped database")
