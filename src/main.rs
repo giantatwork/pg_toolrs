@@ -1,6 +1,7 @@
 // use std::env;
 use std::{
-    io::{Read, Write},
+    fs::File,
+    io::{BufReader, Read, Write},
     path::Path,
     process::{Command, Stdio},
 };
@@ -72,10 +73,80 @@ fn restore(
     docker_container: Option<&str>,
 ) -> Result<(), Error> {
     if !dump_file.exists() {
-        bail!("Path does not exist");
+        bail!("Path {:?} does not exist", dump_file);
     }
 
-    Ok(())
+    let mut command;
+
+    match docker_container {
+        Some(container) => {
+            command = Command::new("docker");
+            command
+                .arg("exec")
+                .arg("-i")
+                .arg(container)
+                .arg("pg_restore");
+        }
+        _ => command = Command::new("pg_restore"),
+    }
+
+    command
+        .arg("-d")
+        .arg("-U")
+        .arg(db_user)
+        .arg("--if-exists")
+        .arg("-c")
+        .arg("---no-owner")
+        .stdin(Stdio::piped());
+
+    let mut res = command.spawn().expect("Failed to start command");
+    let mut stdin = res.stdin.take().expect("Failed to get stdin");
+
+    let mut buffer = [0; 4096];
+
+    let file = File::open(dump_file).expect("Could not open file");
+    let file_size = file.metadata().unwrap().len();
+    let mut file_reader = BufReader::new(file);
+
+    let pb = ProgressBar::new(file_size);
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner} {total_bytes} {bytes_per_sec}")
+            .expect("Template error"),
+    );
+
+    loop {
+        match file_reader.read(&mut buffer) {
+            Ok(0) => {
+                break;
+            }
+            Ok(n) => {
+                let result = stdin.write_all(&buffer[..n]);
+                match result {
+                    Ok(()) => pb.inc(n as u64),
+                    Err(err) => {
+                        bail!("Error: {}", err)
+                    }
+                }
+            }
+            Err(err) => {
+                bail!("Error: {}", err)
+            }
+        }
+    }
+
+    match res.wait() {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                bail!("Error: {:?}", status.code());
+            }
+        }
+        Err(err) => {
+            bail!("Error: {}", err);
+        }
+    }
 }
 
 fn dump(
