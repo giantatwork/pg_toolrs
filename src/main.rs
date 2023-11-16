@@ -69,13 +69,12 @@ fn drop_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Resu
 fn restore(
     db_name: &str,
     db_user: &str,
-    dump_file: &Path,
+    dump_file: &str,
     docker_container: Option<&str>,
 ) -> Result<(), Error> {
-    if !dump_file.exists() {
+    if !Path::new(dump_file).exists() {
         bail!("Path {:?} does not exist", dump_file);
     }
-
     let mut command;
 
     match docker_container {
@@ -215,6 +214,8 @@ fn dump(
 }
 
 fn main() {
+    // https://blog.ediri.io/lets-build-a-cli-in-rust
+
     #[derive(Parser)]
     #[command(author, version)]
     #[command(about = "Tool to perform various db actions", long_about = "blah")]
@@ -228,51 +229,102 @@ fn main() {
     enum Commands {
         Dump(Dump),
         Restore(Restore),
+        Drop(Drop),
+        Create(Create),
     }
 
     #[derive(Args)]
     struct Dump {
         db_name: String,
+        db_user: String,
+        dump_file: Option<String>,
+        docker_container: Option<String>,
     }
 
     #[derive(Args)]
     struct Restore {
         db_name: String,
-        // dump_file: String,
+        db_user: String,
+        dump_file: String,
+        docker_container: Option<String>,
+    }
+
+    #[derive(Args)]
+    struct Drop {
+        db_name: String,
+        db_user: String,
+        docker_container: Option<String>,
+    }
+
+    #[derive(Args)]
+    struct Create {
+        db_name: String,
+        db_user: String,
+        docker_container: Option<String>,
     }
 
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Dump(dump)) => {
-            println!("{}", dump.db_name);
+        Some(Commands::Dump(cmd)) => {
+            match dump(
+                &cmd.db_name,
+                &cmd.db_user,
+                cmd.dump_file.as_deref(),
+                cmd.docker_container.as_deref(),
+            ) {
+                Ok(()) => {
+                    println!("Dumped database {}", cmd.db_name);
+                }
+                Err(err) => {
+                    println!("Failed to dump database {}, error: {}", cmd.db_name, err);
+                }
+            }
         }
-        Some(Commands::Restore(restore)) => {
-            println!("{}", restore.db_name);
+        Some(Commands::Restore(cmd)) => {
+            match restore(
+                &cmd.db_name,
+                &cmd.db_user,
+                &cmd.dump_file,
+                cmd.docker_container.as_deref(),
+            ) {
+                Ok(()) => {
+                    println!("Restored database {}", cmd.db_name);
+                }
+                Err(err) => {
+                    println!("Failed to restore database {}, error: {}", cmd.db_name, err);
+                }
+            }
+        }
+        Some(Commands::Drop(cmd)) => {
+            match drop_db(
+                &cmd.db_name,
+                &cmd.db_user,
+                cmd.docker_container.as_deref(),
+            ){
+                Ok(()) => {
+                    println!("Dropped database {}", cmd.db_name);
+                }
+                Err(err) => {
+                    println!("Failed to drop database {}, error: {}", cmd.db_name, err);
+                }
+            }
+        }
+        Some(Commands::Create(cmd)) => {
+            match create_db(
+                &cmd.db_name,
+                &cmd.db_user,
+                cmd.docker_container.as_deref(),
+            ){
+                Ok(()) => {
+                    println!("Created database {}", cmd.db_name);
+                }
+                Err(err) => {
+                    println!("Failed to create database {}, error: {}", cmd.db_name, err);
+                }
+            }
         }
         None => {}
     }
 
-    // match drop_db("testje", "postgres", Some("pgtest")) {
-    //     Ok(()) => {
-    //         println!("Dropped database")
-    //     }
-    //     Err(err) => println!("Failed to drop database {:?}", err),
-    // }
-
-    // match create_db("testje", "postgres", Some("pgtest")) {
-    //     Ok(()) => {
-    //         println!("Created database")
-    //     }
-    //     Err(err) => println!("Failed to create database {:?}", err),
-    // }
-
-    // let f = Path::new("db.dump");
-
-    // match restore("testje", "postgres", f, Some("pgtest")) {
-    //     Ok(()) => {
-    //         println!("Restored database")
-    //     }
-    //     Err(err) => println!("Failed to restore database {:?}", err),
-    // }
 }
