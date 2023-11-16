@@ -1,5 +1,3 @@
-// use std::env;
-// TODO clap gebruiken voor cli argument parsing
 // TODO aparte modules maken voor functies en helpers etc.
 use std::{
     fs::File,
@@ -8,9 +6,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use indicatif::{ProgressBar, ProgressStyle};
-
 use anyhow::{bail, Error};
+use clap::{Args, Parser, Subcommand};
+use indicatif::{ProgressBar, ProgressStyle};
 
 fn create_db(db_name: &str, db_user: &str, docker_container: Option<&str>) -> Result<(), Error> {
     let mut command: Command;
@@ -217,26 +215,64 @@ fn dump(
 }
 
 fn main() {
-    match drop_db("testje", "postgres", Some("pgtest")) {
-        Ok(()) => {
-            println!("Dropped database")
-        }
-        Err(err) => println!("Failed to drop database {:?}", err),
+    #[derive(Parser)]
+    #[command(author, version)]
+    #[command(about = "Tool to perform various db actions", long_about = "blah")]
+
+    struct Cli {
+        #[command(subcommand)]
+        command: Option<Commands>,
     }
 
-    match create_db("testje", "postgres", Some("pgtest")) {
-        Ok(()) => {
-            println!("Created database")
-        }
-        Err(err) => println!("Failed to create database {:?}", err),
+    #[derive(Subcommand)]
+    enum Commands {
+        Dump(Dump),
+        Restore(Restore),
     }
 
-    let f = Path::new("db.dump");
-
-    match restore("testje", "postgres", f, Some("pgtest")) {
-        Ok(()) => {
-            println!("Restored database")
-        }
-        Err(err) => println!("Failed to restore database {:?}", err),
+    #[derive(Args)]
+    struct Dump {
+        db_name: String,
     }
+
+    #[derive(Args)]
+    struct Restore {
+        db_name: String,
+        // dump_file: String,
+    }
+
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::Dump(dump)) => {
+            println!("{}", dump.db_name);
+        }
+        Some(Commands::Restore(restore)) => {
+            println!("{}", restore.db_name);
+        }
+        None => {}
+    }
+
+    // match drop_db("testje", "postgres", Some("pgtest")) {
+    //     Ok(()) => {
+    //         println!("Dropped database")
+    //     }
+    //     Err(err) => println!("Failed to drop database {:?}", err),
+    // }
+
+    // match create_db("testje", "postgres", Some("pgtest")) {
+    //     Ok(()) => {
+    //         println!("Created database")
+    //     }
+    //     Err(err) => println!("Failed to create database {:?}", err),
+    // }
+
+    // let f = Path::new("db.dump");
+
+    // match restore("testje", "postgres", f, Some("pgtest")) {
+    //     Ok(()) => {
+    //         println!("Restored database")
+    //     }
+    //     Err(err) => println!("Failed to restore database {:?}", err),
+    // }
 }
